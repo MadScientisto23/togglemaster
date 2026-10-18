@@ -1,0 +1,20 @@
+FROM golang:1.27-alpine3.24 AS builder
+
+WORKDIR /app
+
+COPY go.mod .
+
+RUN go mod tidy
+
+FROM golang:1.27-alpine3.24
+
+RUN adduser -D appuser
+
+WORKDIR /app
+
+COPY --from=builder . .
+
+USER appuser
+EXPOSE 8001
+
+CMD  ["go","run","."]
