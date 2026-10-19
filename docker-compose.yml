@@ -67,9 +67,40 @@ services:
     networks:
       - toggle-net
 
+
+  targeting-service:
+    build:
+      context: ./targeting-service
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres-targeting-service:
+        condition: service_healthy
+    env_file:
+      - ./targeting-service/.env
+    networks:
+      - toggle-net
+
+  postgres-targeting-service:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./targeting-service/.env.db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - targeting-service-pgdata:/var/lib/postgresql/data
+      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - toggle-net
+
 volumes:
   flag-service-pgdata:
   auth-service-pgdata:
+  targeting-service-pgdata:
 
 networks:
   toggle-net:
