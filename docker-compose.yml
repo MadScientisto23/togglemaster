@@ -97,10 +97,37 @@ services:
     networks:
       - toggle-net
 
+  evaluation-service:
+    depends_on:
+      redis-evaluation-service:
+        condition: service_healthy
+    build:
+      context: ./evaluation-service
+    ports:
+      - "8004:8004"
+    env_file:
+      - ./evaluation-service/.env
+    networks:
+      - toggle-net
+
+  redis-evaluation-service:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - evaluation-service-redisdata:/data
+    networks:
+      - toggle-net
+
 volumes:
   flag-service-pgdata:
   auth-service-pgdata:
   targeting-service-pgdata:
+  evaluation-service-redisdata:
 
 networks:
   toggle-net:
