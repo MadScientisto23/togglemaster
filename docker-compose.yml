@@ -1,134 +1,217 @@
 services:
-  auth-service:
-    depends_on:
-      postgres-auth-service:
-        condition: service_healthy
-    build:
-      context: ./auth-service
-    ports:
-      - "8001:8001"
-    env_file:
-      - ./auth-service/.env
-    networks:
-      - toggle-net
-
-  postgres-auth-service:
+  # =========================================================
+  # POSTGRESQL EXCLUSIVO DO AUTH-SERVICE
+  # =========================================================
+  postgres-auth:
     image: postgres:16-alpine
     restart: unless-stopped
-    env_file:
-      - ./auth-service/.env.db
+    environment:
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
+      POSTGRES_DB: ${AUTH_DB_NAME}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}"
+        ]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
     volumes:
-      - auth-service-pgdata:/var/lib/postgresql/data
-      - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - auth-pgdata:/var/lib/postgresql/data
+      - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/01-auth.sql:ro
     networks:
       - toggle-net
 
-  analytics-service:
+  # =========================================================
+  # AUTH-SERVICE
+  # =========================================================
+  auth-service:
     build:
-      context: ./analytics-service
+      context: ./auth-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8001"
+      DATABASE_URL: postgres://${AUTH_DB_USER}:${AUTH_DB_PASSWORD}@postgres-auth:5432/${AUTH_DB_NAME}?sslmode=disable
+      MASTER_KEY: ${MASTER_KEY}
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
     ports:
-      - "8005:8005"
-    env_file:
-      - ./analytics-service/.env
+      - "8001:8001"
     networks:
       - toggle-net
 
+  # =========================================================
+  # POSTGRESQL COMPARTILHADO LOCALMENTE
+  # FLAG-SERVICE E TARGETING-SERVICE
+  # =========================================================
+  postgres-features:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${FEATURES_DB_USER}
+      POSTGRES_PASSWORD: ${FEATURES_DB_PASSWORD}
+      POSTGRES_DB: ${FEATURES_DB_NAME}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${FEATURES_DB_USER} -d ${FEATURES_DB_NAME}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - features-pgdata:/var/lib/postgresql/data
+      - ./flag-service/db/init.sql:/docker-entrypoint-initdb.d/01-flags.sql:ro
+      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/02-targeting.sql:ro
+    networks:
+      - toggle-net
+
+  # =========================================================
+  # FLAG-SERVICE
+  # =========================================================
   flag-service:
     build:
       context: ./flag-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8002"
+      DATABASE_URL: postgres://${FEATURES_DB_USER}:${FEATURES_DB_PASSWORD}@postgres-features:5432/${FEATURES_DB_NAME}
+      AUTH_SERVICE_URL: http://auth-service:8001
+    depends_on:
+      postgres-features:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
     ports:
       - "8002:8002"
-    depends_on:
-      postgres-flag-service:
-        condition: service_healthy
-    env_file:
-      - ./flag-service/.env
     networks:
       - toggle-net
 
-  postgres-flag-service:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    env_file:
-      - ./flag-service/.env.db
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    volumes:
-      - flag-service-pgdata:/var/lib/postgresql/data
-      - ./flag-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - toggle-net
-
-
+  # =========================================================
+  # TARGETING-SERVICE
+  # =========================================================
   targeting-service:
     build:
       context: ./targeting-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8003"
+      DATABASE_URL: postgres://${FEATURES_DB_USER}:${FEATURES_DB_PASSWORD}@postgres-features:5432/${FEATURES_DB_NAME}
+      AUTH_SERVICE_URL: http://auth-service:8001
+    depends_on:
+      postgres-features:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
     ports:
       - "8003:8003"
-    depends_on:
-      postgres-targeting-service:
-        condition: service_healthy
-    env_file:
-      - ./targeting-service/.env
     networks:
       - toggle-net
 
-  postgres-targeting-service:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    env_file:
-      - ./targeting-service/.env.db
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    volumes:
-      - targeting-service-pgdata:/var/lib/postgresql/data
-      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - toggle-net
-
-  evaluation-service:
-    depends_on:
-      redis-evaluation-service:
-        condition: service_healthy
-    build:
-      context: ./evaluation-service
-    ports:
-      - "8004:8004"
-    env_file:
-      - ./evaluation-service/.env
-    networks:
-      - toggle-net
-
-  redis-evaluation-service:
+  # =========================================================
+  # REDIS USADO PELO EVALUATION-SERVICE
+  # =========================================================
+  redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
     volumes:
-      - evaluation-service-redisdata:/data
+      - redis-data:/data
     networks:
       - toggle-net
 
-volumes:
-  flag-service-pgdata:
-  auth-service-pgdata:
-  targeting-service-pgdata:
-  evaluation-service-redisdata:
+  # =========================================================
+  # EVALUATION-SERVICE
+  # =========================================================
+  evaluation-service:
+    build:
+      context: ./evaluation-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8004"
+      REDIS_URL: redis://redis:6379
+      FLAG_SERVICE_URL: http://flag-service:8002
+      TARGETING_SERVICE_URL: http://targeting-service:8003
+      SERVICE_API_KEY: ${SERVICE_API_KEY}
+      AWS_REGION: ${AWS_REGION}
+      AWS_SQS_URL: ${AWS_SQS_URL:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      flag-service:
+        condition: service_started
+      targeting-service:
+        condition: service_started
+    ports:
+      - "8004:8004"
+    networks:
+      - toggle-net
 
+  # =========================================================
+  # DYNAMODB LOCAL
+  # =========================================================
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    restart: unless-stopped
+    user: root
+    working_dir: /home/dynamodblocal
+    command: -jar DynamoDBLocal.jar -sharedDb -dbPath ./data
+    ports:
+      - "8006:8000"
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    networks:
+      - toggle-net
+
+  # =========================================================
+  # ANALYTICS-SERVICE
+  # =========================================================
+  analytics-service:
+    build:
+      context: ./analytics-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8005"
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SQS_URL: ${AWS_SQS_URL:-}
+      AWS_DYNAMODB_TABLE: ${DYNAMODB_TABLE}
+      DYNAMODB_ENDPOINT_URL: ${DYNAMODB_ENDPOINT_URL}
+    depends_on:
+      dynamodb-local:
+        condition: service_started
+    ports:
+      - "8005:8005"
+    networks:
+      - toggle-net
+
+# ===========================================================
+# VOLUMES PERSISTENTES
+# ===========================================================
+volumes:
+  auth-pgdata:
+  features-pgdata:
+  redis-data:
+  dynamodb-data:
+
+# ===========================================================
+# REDE INTERNA
+# ===========================================================
 networks:
   toggle-net:
     driver: bridge

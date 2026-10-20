@@ -1,0 +1,25 @@
+#Variáveis de ambiente e credenciais
+.env
+.env.*
+!.env.example
+
+#Python
+pycache/
+*.py[cod]
+.venv/
+venv/
+
+#Go
+bin/
+*.exe
+
+#Visual Studio Code e outras IDEs
+.vscode/
+.idea/
+
+#Sistema operacional
+.DS_Store
+Thumbs.db
+
+#Logs
+*.log
