@@ -147,7 +147,11 @@ services:
       TARGETING_SERVICE_URL: http://targeting-service:8003
       SERVICE_API_KEY: ${SERVICE_API_KEY}
       AWS_REGION: ${AWS_REGION}
-      AWS_SQS_URL: ${AWS_SQS_URL:-}
+      AWS_SQS_URL: ${AWS_SQS_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
+
     depends_on:
       redis:
         condition: service_healthy
@@ -187,9 +191,10 @@ services:
     environment:
       PORT: "8005"
       AWS_REGION: ${AWS_REGION}
+      AWS_SQS_URL: ${AWS_SQS_URL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_SQS_URL: ${AWS_SQS_URL:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
       AWS_DYNAMODB_TABLE: ${DYNAMODB_TABLE}
       DYNAMODB_ENDPOINT_URL: ${DYNAMODB_ENDPOINT_URL}
     depends_on:
