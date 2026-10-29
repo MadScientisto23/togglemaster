@@ -22,7 +22,7 @@ FROM python:3.11-alpine
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN adduser -D -H -u 10001 appuser
+RUN adduser -D -u 10001 appuser
 
 WORKDIR /app
 

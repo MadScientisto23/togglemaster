@@ -20,7 +20,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Criar um usuário nao root para rodar a aplicação
-RUN addgroup -S appgroup && adduser -S -u 10001 -H -G appgroup appuser
+RUN addgroup -S appgroup && adduser -S -u 10001 -G appgroup appuser
 
 WORKDIR /app
 

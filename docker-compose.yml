@@ -45,29 +45,27 @@ services:
       - toggle-net
 
   # =========================================================
-  # POSTGRESQL COMPARTILHADO LOCALMENTE
-  # FLAG-SERVICE E TARGETING-SERVICE
+  # POSTGRESQL EXCLUSIVO DO FLAG-SERVICE
   # =========================================================
-  postgres-features:
+  postgres-flag:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${FEATURES_DB_USER}
-      POSTGRES_PASSWORD: ${FEATURES_DB_PASSWORD}
-      POSTGRES_DB: ${FEATURES_DB_NAME}
+      POSTGRES_USER: ${FLAG_DB_USER}
+      POSTGRES_PASSWORD: ${FLAG_DB_PASSWORD}
+      POSTGRES_DB: ${FLAG_DB_NAME}
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${FEATURES_DB_USER} -d ${FEATURES_DB_NAME}"
+          "pg_isready -U ${FLAG_DB_USER} -d ${FLAG_DB_NAME}"
         ]
       interval: 10s
       timeout: 5s
       retries: 5
     volumes:
-      - features-pgdata:/var/lib/postgresql/data
+      - flag-pgdata:/var/lib/postgresql/data
       - ./flag-service/db/init.sql:/docker-entrypoint-initdb.d/01-flags.sql:ro
-      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/02-targeting.sql:ro
     networks:
       - toggle-net
 
@@ -81,15 +79,40 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8002"
-      DATABASE_URL: postgres://${FEATURES_DB_USER}:${FEATURES_DB_PASSWORD}@postgres-features:5432/${FEATURES_DB_NAME}
+      DATABASE_URL: postgres://${FLAG_DB_USER}:${FLAG_DB_PASSWORD}@postgres-flag:5432/${FLAG_DB_NAME}
       AUTH_SERVICE_URL: http://auth-service:8001
     depends_on:
-      postgres-features:
+      postgres-flag:
         condition: service_healthy
       auth-service:
         condition: service_started
     ports:
       - "8002:8002"
+    networks:
+      - toggle-net
+
+  # =========================================================
+  # POSTGRESQL EXCLUSIVO DO TARGETING-SERVICE
+  # =========================================================
+  postgres-targeting:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TARGETING_DB_USER}
+      POSTGRES_PASSWORD: ${TARGETING_DB_PASSWORD}
+      POSTGRES_DB: ${TARGETING_DB_NAME}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${TARGETING_DB_USER} -d ${TARGETING_DB_NAME}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - targeting-pgdata:/var/lib/postgresql/data
+      - ./targeting-service/db/init.sql:/docker-entrypoint-initdb.d/02-targeting.sql:ro
     networks:
       - toggle-net
 
@@ -103,10 +126,10 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8003"
-      DATABASE_URL: postgres://${FEATURES_DB_USER}:${FEATURES_DB_PASSWORD}@postgres-features:5432/${FEATURES_DB_NAME}
+      DATABASE_URL: postgres://${TARGETING_DB_USER}:${TARGETING_DB_PASSWORD}@postgres-targeting:5432/${TARGETING_DB_NAME}
       AUTH_SERVICE_URL: http://auth-service:8001
     depends_on:
-      postgres-features:
+      postgres-targeting:
         condition: service_healthy
       auth-service:
         condition: service_started
@@ -210,7 +233,8 @@ services:
 # ===========================================================
 volumes:
   auth-pgdata:
-  features-pgdata:
+  flag-pgdata:
+  targeting-pgdata:
   redis-data:
   dynamodb-data:
 
