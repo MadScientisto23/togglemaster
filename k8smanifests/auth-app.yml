@@ -11,7 +11,7 @@ metadata:
 # 2. AWS SECRETS MANAGER INTEGRATION
 # ==========================================
 
-# 2. ClusterSecretStore
+# 2.1 ClusterSecretStore
 apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
@@ -22,7 +22,8 @@ spec:
       service: SecretsManager
       region: us-east-1
 
-
+---
+# 2.2 RDS database credentials
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -41,11 +42,11 @@ spec:
         password: "{{ .password }}"
         DATABASE_URL: "postgres://{{ .username | urlquery }}:{{ .password | urlquery }}@auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com:5432/auth-db?sslmode=require"
   dataFrom:
-  - extract:
-      key: rds!db-e52d7d48-150f-4fe9-a20a-1cca6c25f556
+    - extract:
+        key: rds!db-e52d7d48-150f-4fe9-a20a-1cca6c25f556
 
 ---
-# 2B. APP SECRETS FROM AWS 
+# 2.3 APP SECRETS FROM AWS 
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -83,7 +84,6 @@ data:
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-
 
 ---
 # ==========================================
