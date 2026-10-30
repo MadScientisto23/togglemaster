@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - auth-service/deployment.yaml
+  - auth-service/service.yaml
+  - flag-service/deployment.yaml
+  - flag-service/service.yaml
+  - targeting-service/deployment.yaml
+  - targeting-service/service.yaml
+  - evaluation-service/deployment.yaml
+  - evaluation-service/service.yaml
+  - evaluation-service/hpa.yaml
+  - analytics-service/deployment.yaml
+  - analytics-service/service.yaml
+  - analytics-service/hpa.yaml
+  - ingress.yaml
