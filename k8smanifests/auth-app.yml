@@ -10,6 +10,19 @@ metadata:
 # ==========================================
 # 2. AWS SECRETS MANAGER INTEGRATION
 # ==========================================
+
+# 2. ClusterSecretStore
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: aws-secrets-manager
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: us-east-1
+
+
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -190,3 +203,4 @@ spec:
                 name: auth-service
                 port:
                   number: 8001
+
