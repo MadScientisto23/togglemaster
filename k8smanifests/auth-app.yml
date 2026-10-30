@@ -1,0 +1,189 @@
+# ==========================================
+# 1. NAMESPACE
+# ==========================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth-app
+
+---
+# ==========================================
+# 2. AWS SECRETS MANAGER INTEGRATION
+# ==========================================
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: auth-aws-secrets
+  namespace: auth-app
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: aws-secrets-manager # Your cluster-wide store that uses LabRole
+    kind: ClusterSecretStore
+  target:
+    name: auth-secrets
+  dataFrom:
+  - extract:
+      key: rds!db-e52d7d48-150f-4fe9-a20a-1cca6c25f556 # The exact name of your secret in AWS Secrets Manager
+
+---
+
+# 2B. APP SECRETS FROM AWS 
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: auth-app-aws-secrets
+  namespace: auth-app
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: auth-app-secrets 
+  dataFrom:
+  - extract:
+      key: toggle/auth-app
+
+# ==========================================
+# 3. DATABASE INITIALIZATION SCRIPT (CONFIGMAP)
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-db-init-script
+  namespace: auth-app
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS api_keys (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        
+        -- key_hash armazena o hash SHA-256 da chave, que tem 64 caracteres hexadecimais
+        key_hash VARCHAR(64) NOT NULL UNIQUE, 
+        
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+
+---
+# ==========================================
+# 4. DATABASE MIGRATION JOB
+# ==========================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-db-init-job
+  namespace: auth-app
+spec:
+  ttlSecondsAfterFinished: 100 # Cleans up the pod after success
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: db-migrator
+        image: postgres:16-alpine
+        command: ["psql", "-f", "/scripts/init.sql"]
+        env:
+        # REPLACE WITH YOUR ACTUAL AWS RDS ENDPOINT
+        - name: PGHOST
+          value: "auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com"
+        - name: PGPORT
+          value: "5432"
+        - name: PGDATABASE
+          value: "auth-db"
+        - name: PGUSER
+          valueFrom: { secretKeyRef: { name: auth-secrets, key: username } }
+        - name: PGPASSWORD
+          valueFrom: { secretKeyRef: { name: auth-secrets, key: password } }
+        volumeMounts:
+        - name: script-volume
+          mountPath: /scripts
+      volumes:
+      - name: script-volume
+        configMap:
+          name: auth-db-init-script
+
+---
+# ==========================================
+# 5. AUTH SERVICE DEPLOYMENT
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: auth-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      # No serviceAccountName needed because the EKS Node's LabRole is inherited
+      containers:
+      - name: auth-service
+        # REPLACE WITH YOUR ACTUAL AWS ACCOUNT ID AND REGION
+        image: 736641246442.dkr.ecr.us-east-1.amazonaws.com/auth-service:latest
+        ports:
+        - containerPort: 8001
+        env:
+        - name: PORT
+          value: "8001"
+        - name: DB_USER
+          valueFrom: { secretKeyRef: { name: auth-secrets, key: username } }
+        - name: DB_PASSWORD
+          valueFrom: { secretKeyRef: { name: auth-secrets, key: password } }
+        - name: MASTER_KEY
+          valueFrom: { secretKeyRef: { name: auth-app-secrets, key: MASTER_KEY } }
+        # REPLACE WITH YOUR ACTUAL AWS RDS ENDPOINT
+        - name: DATABASE_URL
+          value: "postgres://$(DB_USER):$(DB_PASSWORD)@auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com:5432/auth-db?sslmode=require"
+
+---
+# ==========================================
+# 6. INTERNAL CLUSTER SERVICE
+# ==========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: auth-app
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - protocol: TCP
+      port: 8001
+      targetPort: 8001
+  type: ClusterIP
+
+---
+# ==========================================
+# 7. NGINX INGRESS (LOAD BALANCER ROUTING)
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth-ingress
+  namespace: auth-app
+  annotations:
+    # Strips '/auth' from the URL before passing it to your app 
+    # (e.g., example.com/auth/login becomes /login for your code)
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /auth/?(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8001
