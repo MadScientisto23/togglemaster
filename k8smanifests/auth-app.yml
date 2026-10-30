@@ -10,7 +10,7 @@ metadata:
 # ==========================================
 # 2. AWS SECRETS MANAGER INTEGRATION
 # ==========================================
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: auth-aws-secrets
@@ -18,18 +18,22 @@ metadata:
 spec:
   refreshInterval: "1h"
   secretStoreRef:
-    name: aws-secrets-manager # Your cluster-wide store that uses LabRole
+    name: aws-secrets-manager
     kind: ClusterSecretStore
   target:
     name: auth-secrets
+    template:
+      data:
+        username: "{{ .username }}"
+        password: "{{ .password }}"
+        DATABASE_URL: "postgres://{{ .username | urlquery }}:{{ .password | urlquery }}@auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com:5432/auth-db?sslmode=require"
   dataFrom:
   - extract:
-      key: rds!db-e52d7d48-150f-4fe9-a20a-1cca6c25f556 # The exact name of your secret in AWS Secrets Manager
+      key: rds!db-e52d7d48-150f-4fe9-a20a-1cca6c25f556
 
 ---
-
 # 2B. APP SECRETS FROM AWS 
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: auth-app-aws-secrets
@@ -141,9 +145,8 @@ spec:
           valueFrom: { secretKeyRef: { name: auth-secrets, key: password } }
         - name: MASTER_KEY
           valueFrom: { secretKeyRef: { name: auth-app-secrets, key: MASTER_KEY } }
-        # REPLACE WITH YOUR ACTUAL AWS RDS ENDPOINT
         - name: DATABASE_URL
-          value: "postgres://$(DB_USER):$(DB_PASSWORD)@auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com:5432/auth-db?sslmode=require"
+          valueFrom: { secretKeyRef: { name: auth-secrets, key: DATABASE_URL } }
 
 ---
 # ==========================================
@@ -165,7 +168,7 @@ spec:
 
 ---
 # ==========================================
-# 7. NGINX INGRESS (LOAD BALANCER ROUTING)
+# 7. NGINX INGRESS
 # ==========================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -173,15 +176,14 @@ metadata:
   name: auth-ingress
   namespace: auth-app
   annotations:
-    # Strips '/auth' from the URL before passing it to your app 
-    # (e.g., example.com/auth/login becomes /login for your code)
-    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /auth/?(.*)
+          - path: /auth(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
