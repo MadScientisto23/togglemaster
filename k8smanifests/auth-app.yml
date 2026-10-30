@@ -45,6 +45,7 @@ spec:
   - extract:
       key: toggle/auth-app
 
+---
 # ==========================================
 # 3. DATABASE INITIALIZATION SCRIPT (CONFIGMAP)
 # ==========================================
