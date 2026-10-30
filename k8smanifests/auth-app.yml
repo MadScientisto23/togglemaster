@@ -8,64 +8,7 @@ metadata:
 
 ---
 # ==========================================
-# 2. AWS SECRETS MANAGER INTEGRATION
-# ==========================================
-
-# 2.1 ClusterSecretStore
-apiVersion: external-secrets.io/v1
-kind: ClusterSecretStore
-metadata:
-  name: aws-secrets-manager
-spec:
-  provider:
-    aws:
-      service: SecretsManager
-      region: us-east-1
-
----
-# 2.2 RDS database credentials
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: auth-aws-secrets
-  namespace: auth-app
-spec:
-  refreshInterval: "1h"
-  secretStoreRef:
-    name: aws-secrets-manager
-    kind: ClusterSecretStore
-  target:
-    name: auth-secrets
-    template:
-      data:
-        username: "{{ .username }}"
-        password: "{{ .password }}"
-        DATABASE_URL: "postgres://{{ .username | urlquery }}:{{ .password | urlquery }}@auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com:5432/auth-db?sslmode=require"
-  dataFrom:
-    - extract:
-        key: rds!db-e52d7d48-150f-4fe9-a20a-1cca6c25f556
-
----
-# 2.3 APP SECRETS FROM AWS 
-apiVersion: external-secrets.io/v1
-kind: ExternalSecret
-metadata:
-  name: auth-app-aws-secrets
-  namespace: auth-app
-spec:
-  refreshInterval: "1h"
-  secretStoreRef:
-    name: aws-secrets-manager
-    kind: ClusterSecretStore
-  target:
-    name: auth-app-secrets 
-  dataFrom:
-  - extract:
-      key: toggle/auth-app
-
----
-# ==========================================
-# 3. DATABASE INITIALIZATION SCRIPT (CONFIGMAP)
+# 2. DATABASE INITIALIZATION SCRIPT (CONFIGMAP)
 # ==========================================
 apiVersion: v1
 kind: ConfigMap
@@ -77,17 +20,14 @@ data:
     CREATE TABLE IF NOT EXISTS api_keys (
         id SERIAL PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
-        
-        -- key_hash armazena o hash SHA-256 da chave, que tem 64 caracteres hexadecimais
-        key_hash VARCHAR(64) NOT NULL UNIQUE, 
-        
+        key_hash VARCHAR(64) NOT NULL UNIQUE,
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
 ---
 # ==========================================
-# 4. DATABASE MIGRATION JOB
+# 3. DATABASE MIGRATION JOB
 # ==========================================
 apiVersion: batch/v1
 kind: Job
@@ -95,7 +35,7 @@ metadata:
   name: auth-db-init-job
   namespace: auth-app
 spec:
-  ttlSecondsAfterFinished: 100 # Cleans up the pod after success
+  ttlSecondsAfterFinished: 100
   template:
     spec:
       restartPolicy: OnFailure
@@ -104,17 +44,22 @@ spec:
         image: postgres:16-alpine
         command: ["psql", "-f", "/scripts/init.sql"]
         env:
-        # REPLACE WITH YOUR ACTUAL AWS RDS ENDPOINT
         - name: PGHOST
           value: "auth-db.cdp7hxfglmyr.us-east-1.rds.amazonaws.com"
         - name: PGPORT
           value: "5432"
         - name: PGDATABASE
-          value: "auth-db"
+          value: "postgres"
         - name: PGUSER
-          valueFrom: { secretKeyRef: { name: auth-secrets, key: username } }
+          valueFrom:
+            secretKeyRef:
+              name: auth-secrets
+              key: username
         - name: PGPASSWORD
-          valueFrom: { secretKeyRef: { name: auth-secrets, key: password } }
+          valueFrom:
+            secretKeyRef:
+              name: auth-secrets
+              key: password
         volumeMounts:
         - name: script-volume
           mountPath: /scripts
@@ -125,7 +70,7 @@ spec:
 
 ---
 # ==========================================
-# 5. AUTH SERVICE DEPLOYMENT
+# 4. AUTH SERVICE DEPLOYMENT
 # ==========================================
 apiVersion: apps/v1
 kind: Deployment
@@ -142,10 +87,8 @@ spec:
       labels:
         app: auth-service
     spec:
-      # No serviceAccountName needed because the EKS Node's LabRole is inherited
       containers:
       - name: auth-service
-        # REPLACE WITH YOUR ACTUAL AWS ACCOUNT ID AND REGION
         image: 736641246442.dkr.ecr.us-east-1.amazonaws.com/auth-service:latest
         ports:
         - containerPort: 8001
@@ -153,17 +96,29 @@ spec:
         - name: PORT
           value: "8001"
         - name: DB_USER
-          valueFrom: { secretKeyRef: { name: auth-secrets, key: username } }
+          valueFrom:
+            secretKeyRef:
+              name: auth-secrets
+              key: username
         - name: DB_PASSWORD
-          valueFrom: { secretKeyRef: { name: auth-secrets, key: password } }
+          valueFrom:
+            secretKeyRef:
+              name: auth-secrets
+              key: password
         - name: MASTER_KEY
-          valueFrom: { secretKeyRef: { name: auth-app-secrets, key: MASTER_KEY } }
+          valueFrom:
+            secretKeyRef:
+              name: auth-app-secrets
+              key: MASTER_KEY
         - name: DATABASE_URL
-          valueFrom: { secretKeyRef: { name: auth-secrets, key: DATABASE_URL } }
+          valueFrom:
+            secretKeyRef:
+              name: auth-secrets
+              key: DATABASE_URL
 
 ---
 # ==========================================
-# 6. INTERNAL CLUSTER SERVICE
+# 5. INTERNAL CLUSTER SERVICE
 # ==========================================
 apiVersion: v1
 kind: Service
@@ -174,14 +129,14 @@ spec:
   selector:
     app: auth-service
   ports:
-    - protocol: TCP
-      port: 8001
-      targetPort: 8001
+  - protocol: TCP
+    port: 8001
+    targetPort: 8001
   type: ClusterIP
 
 ---
 # ==========================================
-# 7. NGINX INGRESS
+# 6. NGINX INGRESS
 # ==========================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -194,13 +149,12 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - http:
-        paths:
-          - path: /auth(/|$)(.*)
-            pathType: ImplementationSpecific
-            backend:
-              service:
-                name: auth-service
-                port:
-                  number: 8001
-
+  - http:
+      paths:
+      - path: /auth(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 8001
