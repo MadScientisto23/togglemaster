@@ -3,5 +3,5 @@ kind: Namespace
 metadata:
   name: togglemaster
   labels:
-    app.kubernets.io/part-of: togglemaster
-    enviroment: local
+    app.kubernetes.io/part-of: togglemaster
+    environment: local

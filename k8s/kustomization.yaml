@@ -1,10 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: togglemaster
+
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secrets.yaml
+#  - secrets.yaml
   - auth-service/deployment.yaml
   - auth-service/service.yaml
   - flag-service/deployment.yaml
@@ -18,3 +20,21 @@ resources:
   - analytics-service/service.yaml
   - analytics-service/hpa.yaml
   - ingress.yaml
+
+# O Kustomize injeta essas URIs automaticamente nos deployments na hora de aplicar
+images:
+  - name: togglemaster-auth-service
+    newName: <URI_DA_IMAGEM_NO_ECR>
+    newTag: latest
+  - name: togglemaster-flag-service
+    newName: <URI_DA_IMAGEM_NO_ECR>
+    newTag: latest
+  - name: togglemaster-targeting-service
+    newName: <URI_DA_IMAGEM_NO_ECR>
+    newTag: latest
+  - name: togglemaster-evaluation-service
+    newName: <URI_DA_IMAGEM_NO_ECR>
+    newTag: latest
+  - name: togglemaster-analytics-service
+    newName: <URI_DA_IMAGEM_NO_ECR>
+    newTag: latest
