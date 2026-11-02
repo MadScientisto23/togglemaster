@@ -38,7 +38,7 @@ kubectl create namespace togglemaster --dry-run=client -o yaml | kubectl apply -
 ### Injetar Secret de Autenticação (Auth Service)
 
 ```bash
-kubectl create secret generic auth-secrets \
+kubectl create secret generic auth-service-secret \
   -n togglemaster \
   --from-literal=DATABASE_URL="$(aws secretsmanager get-secret-value --secret-id 'auth-service-secret' --region us-east-1 --query 'SecretString' --output text | jq -r .DATABASE_URL)" \
   --from-literal=MASTER_KEY="$(aws secretsmanager get-secret-value --secret-id 'auth-service-secret' --region us-east-1 --query 'SecretString' --output text | jq -r .MASTER_KEY)" \
@@ -49,7 +49,7 @@ kubectl create secret generic auth-secrets \
 ### Injetar Secret de Flags (Flag Service)
 
 ```bash
-kubectl create secret generic flag-secrets \
+kubectl create secret generic flag-service-secret \
   -n togglemaster \
   --from-literal=DATABASE_URL="$(aws secretsmanager get-secret-value --secret-id 'flag-service-secret' --region us-east-1 --query 'SecretString' --output text | jq -r .DATABASE_URL)" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -59,7 +59,7 @@ kubectl create secret generic flag-secrets \
 ### Injetar Secret de Targeting
 
 ```bash
-kubectl create secret generic targeting-secrets \
+kubectl create secret generic targeting-service-secret \
   -n togglemaster \
   --from-literal=DATABASE_URL="$(aws secretsmanager get-secret-value --secret-id 'targeting-service-secret' --region us-east-1 --query 'SecretString' --output text | jq -r .DATABASE_URL)" \
   --dry-run=client -o yaml | kubectl apply -f -
@@ -71,9 +71,9 @@ kubectl create secret generic targeting-secrets \
 > ⚠️ **Atenção:** Gere a Chave de API previamente e substitua `COLE_A_CHAVE_GERADA_AQUI` no comando abaixo.
 
 ```bash
-kubectl create secret generic evaluation-secrets \
+kubectl create secret generic evaluation-service-secret \
   -n togglemaster \
-  --from-literal=SERVICE_API_KEY="COLE_A_CHAVE_GERADA_AQUI" \
+  --from-literal=SERVICE_API_KEY="$(aws secretsmanager get-secret-value --secret-id 'evaluation-secret-service' --region us-east-1 --query 'SecretString' --output text | jq -r .SERVICE_API_KEY)" \
   --from-literal=REDIS_URL="$(aws secretsmanager get-secret-value --secret-id 'evaluation-secret-service' --region us-east-1 --query 'SecretString' --output text | jq -r .REDIS_URL)" \
   --dry-run=client -o yaml | kubectl apply -f -
 
@@ -84,7 +84,7 @@ kubectl create secret generic evaluation-secrets \
 > ⚠️ **Atenção:** As credenciais no lab da AWS academy expiram assim que o tempo lá no lab acabar e devem ser reprovisionadas.
 
 ```bash
-kubectl create secret generic analytics-secrets \
+kubectl create secret generic analytics-service-secret \
   -n togglemaster \
   --from-literal=AWS_ACCESS_KEY_ID="$(aws secretsmanager get-secret-value --secret-id 'analytics-service-secret' --region us-east-1 --query 'SecretString' --output text | jq -r .AWS_ACCESS_KEY_ID)" \
   --from-literal=AWS_SECRET_ACCESS_KEY="$(aws secretsmanager get-secret-value --secret-id 'analytics-service-secret' --region us-east-1 --query 'SecretString' --output text | jq -r .AWS_SECRET_ACCESS_KEY)" \
