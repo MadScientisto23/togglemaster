@@ -131,7 +131,7 @@ URL=<ENDPOINT_DO_INGRESS-NGINX>
 ```bash
 kubectl get svc -n ingress-nginx
 ```
-KEY=<CHAVE_DE_API_GERADA_COM_AUTH>
+CKEY=<CHAVE_DE_API_GERADA_COM_AUTH>
 
 - validar o auth
 ```bash
