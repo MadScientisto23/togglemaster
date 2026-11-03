@@ -123,7 +123,36 @@ kubectl get svc -n ingress-nginx
 
 ## 🧪 Comandos para Testar a Aplicação
 
-*(Adicione aqui os `curl` ou instruções de acesso via navegador para validar os endpoints da sua aplicação após o deploy.)*
+- Aqui nós usamos exemplos de comandos com flags já criadas. As rotas foram definidas pelo k8s/ingress.yaml
 
+
+URL=<ENDPOINT_DO_INGRESS-NGINX>
+- Para descobrir o valor dele
+```bash
+kubectl get svc -n ingress-nginx
+```
+KEY=<CHAVE_DE_API_GERADA_COM_AUTH>
+
+- validar o auth
+```bash
+curl http://$URL/auth/validate -H "Authorization: Bearer $CKEY"
 ```
 
+- validar o auth
+```bash
+curl http://$URL/flags/flags -H "Authorization: Bearer $CKEY"
+```
+
+- validar o targeting
+```bash
+curl http://$URL/targeting/rules/enable-new-dashboard -H "Authorization: Bearer $CKEY"
+```
+
+- validar o evaluation
+```bash
+curl "http://$URL/evaluation/evaluate?user_id=user-123&flag_name=enable-new-dashboard"
+```
+
+- utilizar o ab para gerar um stress no analytics-service e no evaluation-service.
+```bash
+ab -k -n 100000 -c 150 "http://$URL/evaluation/evaluate?user_id=test-user-324&flag_name=enable-new-dashboard" &
